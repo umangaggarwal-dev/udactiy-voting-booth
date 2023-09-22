@@ -3,9 +3,11 @@
 # This API should not be exposed as a REST API for election security purposes.
 #
 from typing import List
-from backend.main.objects.voter import Voter, VoterStatus
+
 from backend.main.objects.candidate import Candidate
+from backend.main.objects.voter import Voter, VoterStatus, obfuscate_national_id
 from backend.main.store.data_registry import VotingStore
+
 
 #
 # Voter Registration
@@ -21,19 +23,29 @@ def register_voter(voter: Voter) -> bool:
     :returns: Boolean TRUE if the registration was successful. Boolean FALSE if the voter was already registered
               (based on their National ID)
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    minimal_voter = voter.get_minimal_voter()
+    store = VotingStore.get_instance()
+    try:
+        store.add_voter(minimal_voter.obfuscated_national_id,
+                        minimal_voter.obfuscated_first_name,
+                        minimal_voter.obfuscated_last_name,
+                        VoterStatus.REGISTERED_NOT_VOTED)
+        return True
+    except Exception as err:
+        return False
 
 
-def get_voter_status(voter_national_id: str) -> VoterStatus:
+def get_voter_status(voter_national_id: str) -> str:
     """
     Checks to see if the specified voter is registered.
 
     :param: voter_national_id The sensitive ID of the voter to check the registration status of.
     :returns: The status of the voter that best describes their situation
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    obfuscated_national_id = obfuscate_national_id(voter_national_id)
+    store = VotingStore.get_instance()
+    minimal_voter = store.get_voter(obfuscated_national_id)
+    return minimal_voter.status if minimal_voter else VoterStatus.NOT_REGISTERED.value
 
 
 def de_register_voter(voter_national_id: str) -> bool:
@@ -45,8 +57,16 @@ def de_register_voter(voter_national_id: str) -> bool:
     :param: voter_national_id The sensitive ID of the voter to de-register.
     :returns: Boolean TRUE if de-registration was successful. Boolean FALSE otherwise.
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    obfuscated_national_id = obfuscate_national_id(voter_national_id)
+    store = VotingStore.get_instance()
+    minimal_voter = store.get_voter(obfuscated_national_id)
+    if minimal_voter and minimal_voter.status != VoterStatus.FRAUD_COMMITTED:
+        try:
+            store.delete_voter(obfuscated_national_id)
+            return True
+        except Exception as err:
+            pass
+    return False
 
 
 #

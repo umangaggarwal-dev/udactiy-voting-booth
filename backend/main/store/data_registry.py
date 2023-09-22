@@ -4,10 +4,11 @@
 
 import sqlite3
 from sqlite3 import Connection
+from typing import List, Tuple
 
-from typing import List
-
+from backend.main.objects.ballot import Ballot
 from backend.main.objects.candidate import Candidate
+from backend.main.objects.voter import MinimalVoter
 
 
 class VotingStore:
@@ -60,6 +61,12 @@ class VotingStore:
         """
         self.connection.execute(
             """CREATE TABLE candidates (candidate_id integer primary key autoincrement, name text)""")
+        self.connection.execute(
+            """CREATE TABLE voters (obfuscated_national_id text primary key, 
+            obfuscated_first_name text, obfuscated_last_name text, status text)""")
+        self.connection.execute(
+            """CREATE TABLE ballots (ballot_number text primary key, 
+            chosen_candidate_id text, voter_comments text, status text)""")
         # TODO: Add additional tables here, as you see fit
         self.connection.commit()
 
@@ -67,7 +74,7 @@ class VotingStore:
         """
         Adds a candidate into the candidate table, overwriting an existing entry if one exists
         """
-        self.connection.execute("""INSERT INTO candidates (name) VALUES (?)""", (candidate_name, ))
+        self.connection.execute("""INSERT INTO candidates (name) VALUES (?)""", (candidate_name,))
         self.connection.commit()
 
     def get_candidate(self, candidate_id: str) -> Candidate:
@@ -94,7 +101,72 @@ class VotingStore:
 
         return all_candidates
 
+    def add_voter(self, obfuscated_national_id, obfuscated_first_name, obfuscated_last_name, status):
+        self.connection.execute(
+            """INSERT INTO voters (obfuscated_national_id , obfuscated_first_name , 
+            obfuscated_last_name , status) VALUES (?, ?, ?, ?)""",
+            (obfuscated_national_id, obfuscated_first_name, obfuscated_last_name, status))
+        self.connection.commit()
+
+    def get_voter(self, obfuscated_national_id) -> MinimalVoter:
+        cursor = self.connection.cursor()
+        cursor.execute("""SELECT * FROM voters WHERE obfuscated_national_id=?""", obfuscated_national_id)
+        voter_row = cursor.fetchone()
+        voter = MinimalVoter(
+            obfuscated_national_id,
+            voter_row[1],
+            voter_row[2],
+            voter_row[3]
+        ) if voter_row else None
+        self.connection.commit()
+        return voter
+
+    def update_voter_status(self, obfuscated_national_id, status):
+        self.connection.execute("""UPDATE ballots SET status = ? 
+        WHERE obfuscated_national_id = ?""", (status, obfuscated_national_id))
+        self.connection.commit()
+
+    def delete_voter(self, obfuscated_national_id):
+        self.connection.execute(
+            """DELETE FROM voters where obfuscated_national_id = ?""", obfuscated_national_id)
+        self.connection.commit()
+
+    def add_ballot(self, ballot_number):
+        self.connection.execute("""INSERT INTO ballots (ballot_number) VALUES (?)""", (ballot_number,))
+        self.connection.commit()
+
+    def get_ballot(self, ballot_number) -> Tuple[Ballot, str]:
+        cursor = self.connection.cursor()
+        cursor.execute("""SELECT * FROM ballots WHERE ballot_number = ?""", ballot_number)
+        ballot_row = cursor.fetchone()
+        ballot = Ballot(
+            ballot_number,
+            ballot_row[1],
+            ballot_row[2]
+        )
+        return ballot, ballot_row[3]
+
+    def delete_ballot(self, ballot_number):
+        self.connection.execute(
+            """DELETE FROM ballots where ballot_number = ?""", ballot_number)
+        self.connection.commit()
+
+    def update_ballot(self, ballot_number, chosen_candidate_id, voter_comments, status):
+        self.connection.execute("""UPDATE ballots SET chosen_candidate_id = ?, voter_comments = ?, status = ? 
+        WHERE ballot_number=?""", (chosen_candidate_id, voter_comments, status, ballot_number))
+        self.connection.commit()
+
+    def get_all_ballots(self) -> List[Tuple[Ballot, str]]:
+        """
+        Gets ALL the ballots from the database
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""SELECT * FROM ballots""")
+        all_ballot_rows = cursor.fetchall()
+        all_ballots = [(Ballot(str(ballot_row[0]), ballot_row[1], ballot_row[2]), ballot_row[3])
+                       for ballot_row in all_ballot_rows]
+        self.connection.commit()
+        return all_ballots
     # TODO: If you create more tables in the create_tables method, feel free to add more methods here to make accessing
     #       data from those tables easier. See get_all_candidates, get_candidates and add_candidate for examples of how
     #       to do this.
-

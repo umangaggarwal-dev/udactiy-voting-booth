@@ -1,14 +1,23 @@
+import base64
+
+import bcrypt
+import jsons
+
+SECRET_NATIONAL_ID_SALT = "SECRET_NATIONAL_ID_SALT"
+
+
 class Ballot:
     """
     A ballot that exists in a specific, secret manner
     """
+
     def __init__(self, ballot_number: str, chosen_candidate_id: str, voter_comments: str):
         self.ballot_number = ballot_number
         self.chosen_candidate_id = chosen_candidate_id
         self.voter_comments = voter_comments
 
 
-def generate_ballot_number() -> str:
+def generate_ballot_number(national_id: str, salt: str = None) -> str:
     """
     Produces a ballot number. Feel free to add parameters to this method, if you feel those are necessary.
 
@@ -24,5 +33,9 @@ def generate_ballot_number() -> str:
 
     :return: A string representing a ballot number that satisfies the conditions above
     """
-    # TODO: Implement this! Feel free to add parameters to this method, if necessary
-    raise NotImplementedError()
+    sanitized_national_id = national_id.replace("-", "").replace(" ", "").strip()
+    if not salt:
+        salt = bcrypt.gensalt()
+    ballot_hash = bcrypt.hashpw(sanitized_national_id.encode("utf-8"), salt).decode("utf-8")
+    json_string = jsons.dumps({"ballot": ballot_hash, "salt": salt})
+    return base64.b64encode(json_string).decode("utf-8")

@@ -1,8 +1,14 @@
+import base64
 from typing import Set, Optional
 
-from backend.main.objects.voter import Voter, BallotStatus
+import jsons
+
+from backend.main.api.registry import get_voter_status
+from backend.main.detection.pii_detection import redact_free_text
+from backend.main.objects.ballot import Ballot, generate_ballot_number
 from backend.main.objects.candidate import Candidate
-from backend.main.objects.ballot import Ballot
+from backend.main.objects.voter import BallotStatus, obfuscate_national_id, VoterStatus
+from backend.main.store.data_registry import VotingStore
 
 
 def issue_ballot(voter_national_id: str) -> Optional[str]:
@@ -13,8 +19,17 @@ def issue_ballot(voter_national_id: str) -> Optional[str]:
     :params: voter_national_id The sensitive ID of the voter to issue a new ballot to.
     :returns: The ballot number of the new ballot, or None if the voter isn't registered
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    store = VotingStore.get_instance()
+    obfuscated_national_id = obfuscate_national_id(voter_national_id)
+    try:
+        voter = store.get_voter(obfuscated_national_id)
+        if voter:
+            ballot_number = generate_ballot_number(voter_national_id)
+            store.add_ballot(ballot_number)
+            return ballot_number
+    except Exception as err:
+        pass
+    return None
 
 
 def count_ballot(ballot: Ballot, voter_national_id: str) -> BallotStatus:
@@ -33,8 +48,29 @@ def count_ballot(ballot: Ballot, voter_national_id: str) -> BallotStatus:
     :param: voter_national_id The sensitive ID of the voter who the ballot corresponds to.
     :returns: The Ballot Status after the ballot has been processed.
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    obfuscated_national_id = obfuscate_national_id(voter_national_id)
+    voter_status = get_voter_status(obfuscated_national_id)
+    if voter_status == VoterStatus.NOT_REGISTERED.value:
+        return BallotStatus.VOTER_NOT_REGISTERED
+    store = VotingStore.get_instance()
+    existing_ballot, status = store.get_ballot(ballot.ballot_number)
+    if not existing_ballot:
+        return BallotStatus.INVALID_BALLOT
+    is_matched_ballot = verify_ballot(voter_national_id, ballot.ballot_number)
+    if not is_matched_ballot:
+        return BallotStatus.VOTER_BALLOT_MISMATCH
+    if voter_status != VoterStatus.REGISTERED_NOT_VOTED.value:
+        # mark fraud
+        store.update_voter_status(obfuscated_national_id, VoterStatus.FRAUD_COMMITTED.value)
+        invalidate_ballot(ballot.ballot_number)
+        return BallotStatus.FRAUD_COMMITTED
+    ballot.voter_comments = redact_free_text(ballot.voter_comments)
+    store.update_ballot(ballot.ballot_number,
+                        ballot.chosen_candidate_id,
+                        ballot.voter_comments,
+                        BallotStatus.BALLOT_COUNTED.value)
+    store.update_voter_status(obfuscated_national_id, VoterStatus.BALLOT_COUNTED.value)
+    return BallotStatus.BALLOT_COUNTED
 
 
 def invalidate_ballot(ballot_number: str) -> bool:
@@ -47,8 +83,15 @@ def invalidate_ballot(ballot_number: str) -> bool:
     :returns: If the ballot does not exist or has already been cast, will return Boolean FALSE.
               Otherwise will return Boolean TRUE.
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    store = VotingStore.get_instance()
+    try:
+        ballot, status = store.get_ballot(ballot_number)
+        if ballot and status and status == "" and ballot.voter_comments == "" and ballot.chosen_candidate_id == "":
+            store.delete_ballot(ballot_number)
+            return True
+    except Exception as err:
+        pass
+    return False
 
 
 def verify_ballot(voter_national_id: str, ballot_number: str) -> bool:
@@ -65,8 +108,19 @@ def verify_ballot(voter_national_id: str, ballot_number: str) -> bool:
     :returns: Boolean True if the ballot was issued to the voter specified, and if the ballot has not been marked as
               invalid. Boolean False otherwise.
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    store = VotingStore.get_instance()
+    try:
+        ballot = store.get_ballot(ballot_number)
+        if ballot:
+            json_string = base64.b64decode(ballot_number.encode("utf-8")).decode("utf-8")
+            ballot_dict = jsons.loads(json_string)
+            salt = ballot_dict["salt"]
+            generated_ballot = generate_ballot_number(voter_national_id, salt)
+            if generated_ballot == ballot_number:
+                return True
+    except Exception as err:
+        pass
+    return False
 
 
 #
@@ -78,8 +132,12 @@ def get_all_ballot_comments() -> Set[str]:
     Returns a list of all the ballot comments that are non-empty.
     :returns: A list of all the ballot comments that are non-empty
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    store = VotingStore.get_instance()
+    ballot_list = [ballot[0] for ballot in store.get_all_ballots()]
+    return set(map(
+        lambda ballot: ballot.voter_comments,
+        filter(lambda ballot: ballot.voter_comments is not None and ballot.voter_comments != "", ballot_list)
+    ))
 
 
 def compute_election_winner() -> Candidate:
@@ -87,8 +145,15 @@ def compute_election_winner() -> Candidate:
     Computes the winner of the election - the candidate that gets the most votes (even if there is not a majority).
     :return: The winning Candidate
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    store = VotingStore.get_instance()
+    ballot_tuple_list = store.get_all_ballots()
+    ballot_list = list(map(lambda ballot: ballot[0],
+                           filter(lambda ballot: ballot[1] == BallotStatus.BALLOT_COUNTED.value, ballot_tuple_list)))
+    candidate_id_count = {}
+    for ballot in ballot_list:
+        candidate_id = ballot.chosen_candidate_id
+        candidate_id_count.update({candidate_id: candidate_id_count.get(candidate_id, 0) + 1})
+    return max(candidate_id_count, key=lambda id: candidate_id_count[id])
 
 
 def get_all_fraudulent_voters() -> Set[str]:
