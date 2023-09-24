@@ -45,7 +45,7 @@ def get_voter_status(voter_national_id: str) -> str:
     obfuscated_national_id = obfuscate_national_id(voter_national_id)
     store = VotingStore.get_instance()
     minimal_voter = store.get_voter(obfuscated_national_id)
-    return minimal_voter.status if minimal_voter else VoterStatus.NOT_REGISTERED.value
+    return minimal_voter.status if minimal_voter else VoterStatus.NOT_REGISTERED
 
 
 def de_register_voter(voter_national_id: str) -> bool:

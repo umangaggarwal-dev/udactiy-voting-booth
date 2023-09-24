@@ -7,6 +7,7 @@ from enum import Enum
 import jsons
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 
 from backend.main.store import secret_registry
 
@@ -26,12 +27,18 @@ def obfuscate_national_id(national_id: str) -> str:
     sanitized_national_id = national_id.replace("-", "").replace(" ", "").strip()
     sym_key = secret_registry.get_secret_bytes(SECRET_NATIONAL_ID_KEY)
     if not sym_key:
-        sym_key = get_random_bytes(EXPECTED_BYTES * 2)
+        sym_key = get_random_bytes(EXPECTED_BYTES // 2)
         secret_registry.overwrite_secret_bytes(SECRET_NATIONAL_ID_KEY, sym_key)
-    cipher = AES.new(sym_key, AES.MODE_SIV)
-    cipher.update(b"")
-    ciphertext, tag = cipher.encrypt_and_digest(sanitized_national_id.encode("utf-8"))
+    cipher = AES.new(sym_key, AES.MODE_ECB)
+    ciphertext = cipher.encrypt(pad(sanitized_national_id.encode("utf-8"), AES.block_size))
     return base64.b64encode(ciphertext).decode("utf-8")
+
+
+def decrypt_national_id(obfuscated_national_id: str) -> str:
+    sym_key = secret_registry.get_secret_bytes(SECRET_NATIONAL_ID_KEY)
+    cipher = AES.new(sym_key, AES.MODE_ECB)
+    decoded_id = base64.b64decode(obfuscated_national_id.encode("utf-8"))
+    return unpad(cipher.decrypt(decoded_id), AES.block_size).decode("utf-8")
 
 
 def encrypt_name(name: str) -> str:
@@ -52,7 +59,8 @@ def encrypt_name(name: str) -> str:
     ciphertext, tag = cipher.encrypt_and_digest(stripped_name.encode("utf-8"))
     ciphertext_str = base64.b64encode(ciphertext).decode("utf-8")
     tag_str = base64.b64encode(tag).decode("utf-8")
-    return jsons.dumps({'ciphertext': ciphertext_str, 'tag': tag_str, 'nonce': nonce})
+    encoded_nonce = base64.b64encode(nonce).decode("utf-8")
+    return jsons.dumps({'ciphertext': ciphertext_str, 'tag': tag_str, 'nonce': encoded_nonce})
 
 
 def decrypt_name(encrypted_name: str) -> str:
@@ -78,7 +86,8 @@ class MinimalVoter:
     This is the class that we want to be using in the majority of our codebase.
     """
 
-    def __init__(self, obfuscated_first_name: str, obfuscated_last_name: str, obfuscated_national_id: str, status: str):
+    def __init__(self, obfuscated_first_name: str, obfuscated_last_name: str,
+                 obfuscated_national_id: str, status: Enum):
         self.obfuscated_national_id = obfuscated_national_id
         self.obfuscated_first_name = obfuscated_first_name
         self.obfuscated_last_name = obfuscated_last_name
@@ -105,7 +114,7 @@ class Voter:
             encrypt_name(self.first_name.strip()),
             encrypt_name(self.last_name.strip()),
             obfuscate_national_id(self.national_id),
-            VoterStatus.NOT_REGISTERED.value)
+            VoterStatus.NOT_REGISTERED)
 
 
 class VoterStatus(Enum):

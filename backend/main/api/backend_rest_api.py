@@ -8,16 +8,16 @@
 # $ flask run
 #
 
-from flask import request
-import backend.main.api.balloting as balloting
-import backend.main.api.registry as registry
-from backend.main.objects.voter import Voter, BallotStatus
-from backend.main.objects.ballot import Ballot
-from flask_api import FlaskAPI, status
 import jsons
+from flask import request, Flask
 from flask_cors import CORS
 
-app = FlaskAPI(__name__)
+import backend.main.api.balloting as balloting
+import backend.main.api.registry as registry
+from backend.main.objects.ballot import Ballot
+from backend.main.objects.voter import Voter, BallotStatus
+
+app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": ["http://localhost:*", "http://127.0.0.1:*"]}})
 
 
@@ -37,7 +37,7 @@ def count_ballot():
     ballot = Ballot(ballot_number, chosen_candidate_id, voter_comments)
     result = balloting.count_ballot(ballot, voter_national_id)
     return {"status": jsons.dumps(result.value)}, \
-        status.HTTP_202_ACCEPTED if result == BallotStatus.BALLOT_COUNTED else status.HTTP_409_CONFLICT
+        202 if result == BallotStatus.BALLOT_COUNTED else 409
 
 
 @app.route('/api/get_all_candidates')
@@ -63,6 +63,19 @@ def populate_database():
     registry.register_candidate("Arnav Arora")
 
     # TODO: Feel free to add voters to the voter registry, and issue ballots
+    registry.register_voter(Voter("Umang", "Aggarwal", "111-11-1111"))
+    registry.register_voter(Voter("Foo", "Aggarwal", "111-11-1112"))
+    registry.register_voter(Voter("Bar", "Aggarwal", "111-11-1113"))
+
+    print(balloting.issue_ballot("111-11-1111"))
+    print(balloting.issue_ballot("111-11-1112"))
+    print(balloting.issue_ballot("111-11-1113"))
 
 
-populate_database()
+def main():
+    populate_database()
+    app.run("localhost", 5000, debug=True)
+
+
+if __name__ == "__main__":
+    main()

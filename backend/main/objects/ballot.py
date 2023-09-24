@@ -37,5 +37,6 @@ def generate_ballot_number(national_id: str, salt: str = None) -> str:
     if not salt:
         salt = bcrypt.gensalt()
     ballot_hash = bcrypt.hashpw(sanitized_national_id.encode("utf-8"), salt).decode("utf-8")
-    json_string = jsons.dumps({"ballot": ballot_hash, "salt": salt})
-    return base64.b64encode(json_string).decode("utf-8")
+    encoded_salt = base64.b64encode(salt).decode("utf-8")
+    json_string = jsons.dumps({"ballot": ballot_hash, "salt": encoded_salt})
+    return base64.b64encode(json_string.encode("utf-8")).decode("utf-8")

@@ -7,7 +7,7 @@ from backend.main.api.registry import get_voter_status
 from backend.main.detection.pii_detection import redact_free_text
 from backend.main.objects.ballot import Ballot, generate_ballot_number
 from backend.main.objects.candidate import Candidate
-from backend.main.objects.voter import BallotStatus, obfuscate_national_id, VoterStatus
+from backend.main.objects.voter import BallotStatus, obfuscate_national_id, VoterStatus, decrypt_name
 from backend.main.store.data_registry import VotingStore
 
 
@@ -49,19 +49,20 @@ def count_ballot(ballot: Ballot, voter_national_id: str) -> BallotStatus:
     :returns: The Ballot Status after the ballot has been processed.
     """
     obfuscated_national_id = obfuscate_national_id(voter_national_id)
-    voter_status = get_voter_status(obfuscated_national_id)
-    if voter_status == VoterStatus.NOT_REGISTERED.value:
+    voter_status = get_voter_status(voter_national_id)
+    if voter_status == VoterStatus.NOT_REGISTERED:
         return BallotStatus.VOTER_NOT_REGISTERED
     store = VotingStore.get_instance()
-    existing_ballot, status = store.get_ballot(ballot.ballot_number)
-    if not existing_ballot:
+    try:
+        existing_ballot, status = store.get_ballot(ballot.ballot_number)
+    except Exception as err:
         return BallotStatus.INVALID_BALLOT
     is_matched_ballot = verify_ballot(voter_national_id, ballot.ballot_number)
     if not is_matched_ballot:
         return BallotStatus.VOTER_BALLOT_MISMATCH
-    if voter_status != VoterStatus.REGISTERED_NOT_VOTED.value:
+    if voter_status != VoterStatus.REGISTERED_NOT_VOTED:
         # mark fraud
-        store.update_voter_status(obfuscated_national_id, VoterStatus.FRAUD_COMMITTED.value)
+        store.update_voter_status(obfuscated_national_id, VoterStatus.FRAUD_COMMITTED)
         invalidate_ballot(ballot.ballot_number)
         return BallotStatus.FRAUD_COMMITTED
     ballot.voter_comments = redact_free_text(ballot.voter_comments)
@@ -69,7 +70,7 @@ def count_ballot(ballot: Ballot, voter_national_id: str) -> BallotStatus:
                         ballot.chosen_candidate_id,
                         ballot.voter_comments,
                         BallotStatus.BALLOT_COUNTED.value)
-    store.update_voter_status(obfuscated_national_id, VoterStatus.BALLOT_COUNTED.value)
+    store.update_voter_status(obfuscated_national_id, VoterStatus.BALLOT_COUNTED)
     return BallotStatus.BALLOT_COUNTED
 
 
@@ -86,7 +87,9 @@ def invalidate_ballot(ballot_number: str) -> bool:
     store = VotingStore.get_instance()
     try:
         ballot, status = store.get_ballot(ballot_number)
-        if ballot and status and status == "" and ballot.voter_comments == "" and ballot.chosen_candidate_id == "":
+        if (ballot and (status is None or status == "")
+                and (ballot.voter_comments is None or ballot.voter_comments == "")
+                and (ballot.chosen_candidate_id is None or ballot.chosen_candidate_id == "")):
             store.delete_ballot(ballot_number)
             return True
     except Exception as err:
@@ -114,7 +117,7 @@ def verify_ballot(voter_national_id: str, ballot_number: str) -> bool:
         if ballot:
             json_string = base64.b64decode(ballot_number.encode("utf-8")).decode("utf-8")
             ballot_dict = jsons.loads(json_string)
-            salt = ballot_dict["salt"]
+            salt = base64.b64decode(ballot_dict["salt"].encode("utf-8"))
             generated_ballot = generate_ballot_number(voter_national_id, salt)
             if generated_ballot == ballot_number:
                 return True
@@ -153,7 +156,8 @@ def compute_election_winner() -> Candidate:
     for ballot in ballot_list:
         candidate_id = ballot.chosen_candidate_id
         candidate_id_count.update({candidate_id: candidate_id_count.get(candidate_id, 0) + 1})
-    return max(candidate_id_count, key=lambda id: candidate_id_count[id])
+    winner_id = max(candidate_id_count, key=lambda id: candidate_id_count[id])
+    return store.get_candidate(winner_id)
 
 
 def get_all_fraudulent_voters() -> Set[str]:
@@ -165,5 +169,7 @@ def get_all_fraudulent_voters() -> Set[str]:
 
     Then this method would return {"John Smith", "Linda Navarro"} - with a space separating the first and last names.
     """
-    # TODO: Implement this!
-    raise NotImplementedError()
+    store = VotingStore.get_instance()
+    voter_list = store.get_all_voters(VoterStatus.FRAUD_COMMITTED)
+    return set(map(lambda voter: decrypt_name(voter.obfuscated_first_name) + " "
+                                 + decrypt_name(voter.obfuscated_last_name), voter_list))

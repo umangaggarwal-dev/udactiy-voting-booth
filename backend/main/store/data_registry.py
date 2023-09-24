@@ -8,7 +8,7 @@ from typing import List, Tuple
 
 from backend.main.objects.ballot import Ballot
 from backend.main.objects.candidate import Candidate
-from backend.main.objects.voter import MinimalVoter
+from backend.main.objects.voter import MinimalVoter, VoterStatus
 
 
 class VotingStore:
@@ -101,43 +101,63 @@ class VotingStore:
 
         return all_candidates
 
-    def add_voter(self, obfuscated_national_id, obfuscated_first_name, obfuscated_last_name, status):
+    def add_voter(self, obfuscated_national_id: str, obfuscated_first_name: str,
+                  obfuscated_last_name: str, status: VoterStatus):
         self.connection.execute(
             """INSERT INTO voters (obfuscated_national_id , obfuscated_first_name , 
             obfuscated_last_name , status) VALUES (?, ?, ?, ?)""",
-            (obfuscated_national_id, obfuscated_first_name, obfuscated_last_name, status))
+            (obfuscated_national_id, obfuscated_first_name, obfuscated_last_name, status.value))
         self.connection.commit()
 
-    def get_voter(self, obfuscated_national_id) -> MinimalVoter:
+    def get_voter(self, obfuscated_national_id: str) -> MinimalVoter:
         cursor = self.connection.cursor()
-        cursor.execute("""SELECT * FROM voters WHERE obfuscated_national_id=?""", obfuscated_national_id)
+        cursor.execute("""SELECT * FROM voters WHERE obfuscated_national_id=?""",
+                       (obfuscated_national_id,))
         voter_row = cursor.fetchone()
         voter = MinimalVoter(
             obfuscated_national_id,
             voter_row[1],
             voter_row[2],
-            voter_row[3]
+            VoterStatus(voter_row[3])
         ) if voter_row else None
         self.connection.commit()
         return voter
 
-    def update_voter_status(self, obfuscated_national_id, status):
-        self.connection.execute("""UPDATE ballots SET status = ? 
-        WHERE obfuscated_national_id = ?""", (status, obfuscated_national_id))
+    def update_voter_status(self, obfuscated_national_id: str, status: VoterStatus):
+        self.connection.execute("""UPDATE voters SET status = ? 
+        WHERE obfuscated_national_id = ?""", (status.value, obfuscated_national_id))
         self.connection.commit()
 
-    def delete_voter(self, obfuscated_national_id):
+    def delete_voter(self, obfuscated_national_id: str):
         self.connection.execute(
-            """DELETE FROM voters where obfuscated_national_id = ?""", obfuscated_national_id)
+            """DELETE FROM voters where obfuscated_national_id = ?""", (obfuscated_national_id,))
         self.connection.commit()
 
-    def add_ballot(self, ballot_number):
+    def get_all_voters(self, status: VoterStatus = None) -> List[MinimalVoter]:
+        cursor = self.connection.cursor()
+        if status:
+            query = """SELECT * FROM voters WHERE status = ?"""
+            cursor.execute(query, (status.value,))
+        else:
+            query = """SELECT * FROM voters"""
+            cursor.execute(query)
+        all_voter_rows = cursor.fetchall()
+        all_voters = [MinimalVoter(
+            obfuscated_national_id=voter[0],
+            obfuscated_first_name=voter[1],
+            obfuscated_last_name=voter[2],
+            status=VoterStatus(voter[3]))
+            for voter in all_voter_rows]
+        self.connection.commit()
+        return all_voters
+
+    def add_ballot(self, ballot_number: str):
         self.connection.execute("""INSERT INTO ballots (ballot_number) VALUES (?)""", (ballot_number,))
         self.connection.commit()
 
-    def get_ballot(self, ballot_number) -> Tuple[Ballot, str]:
+    def get_ballot(self, ballot_number: str) -> Tuple[Ballot, str]:
         cursor = self.connection.cursor()
-        cursor.execute("""SELECT * FROM ballots WHERE ballot_number = ?""", ballot_number)
+        cursor.execute("""SELECT * FROM ballots WHERE ballot_number = ?""", (ballot_number,))
         ballot_row = cursor.fetchone()
         ballot = Ballot(
             ballot_number,
@@ -146,12 +166,12 @@ class VotingStore:
         )
         return ballot, ballot_row[3]
 
-    def delete_ballot(self, ballot_number):
+    def delete_ballot(self, ballot_number: str):
         self.connection.execute(
-            """DELETE FROM ballots where ballot_number = ?""", ballot_number)
+            """DELETE FROM ballots where ballot_number = ?""", (ballot_number,))
         self.connection.commit()
 
-    def update_ballot(self, ballot_number, chosen_candidate_id, voter_comments, status):
+    def update_ballot(self, ballot_number: str, chosen_candidate_id: str, voter_comments: str, status: str):
         self.connection.execute("""UPDATE ballots SET chosen_candidate_id = ?, voter_comments = ?, status = ? 
         WHERE ballot_number=?""", (chosen_candidate_id, voter_comments, status, ballot_number))
         self.connection.commit()
