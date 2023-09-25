@@ -1,21 +1,89 @@
 1. Proactive not Reactive; Preventative not Remedial
     a. How this application does it -
+
+        As we are designing the application changes keeping data privacy in mind, we are very proactive and considering
+        the important edge cases to keep our data safe and the user information private.
+
     b. What we can do better -
+
+        As we are heavily dependent on the secrets we are keeping, we are still prone to insider attacks. There are
+        technologies to keep these secrets safe and private.
+
 2. Privacy as the Default
     a. How this application does it -
+
+        The privacy of the user data is not compromised by default.
+        Moreover, we are ensuring data minimization and are clearly stating the use and retention of data.
+        We are not sharing the information with anyone.
+
     b. What we can do better -
+
+        We can offer more information about why we are taking any information, minimization and the privacy settings.
+
 3. Privacy Embedded into Design
     a. How this application does it -
+
+        As we are providing privacy assurance throughout the business/operation of voting we are ensuring privacy into
+        the design.
+
     b. What we can do better -
+
+        Another important aspect of privacy embedded design is infrastructure privacy. Compromised database and secrets
+        could have a devastating impact.
+        We should also make the entire database immutable.
+
 4. Full Functionality — Postive-Sum, not Zero-Sum
     a. How this application does it -
+
+        The enhancement of privacy does not compromise the operations of the voting system. There are a number of ways
+        we are helping both privacy and operations -
+        1) The national ID and user information is kept obfuscated/encrypted after a voter registration. We are still
+        verifying voter registration by obfuscating the provided national ID and matching it with the database.
+        2) The ballot numbers are generated as a non-deterministic hash of the national ID. This way we are able to tell
+        whether the ballot belongs to the given national ID or not. However, since the hash is non-deterministic it is
+        practically impossible to find out if two ballots belong to the same voter.
+        3. Though the votes are cast against the ballot number, we are still preventing double voting. This is done by
+        checking the voter's current status, which is updated to 'voted' once the voter casts the vote. When a second
+        ballot is used by the voter, it is validated with the national ID and marked as fraud.
+
     b. What we can do better -
+
+        We could not make the ballot status immutable, as we are updating the status to counted, fraud etc. This puts
+        us on the risk of a compromised ballot if someone has the access to the internal implementation or the database.
+
 5. End-to-End Security — Lifecycle Protection
     a. How this application does it -
+
+        We are providing voter-specific ballots and ensuring that only that authorised voter is able to cast the ballot.
+        The ballot numbers are generated as a non-deterministic hash of the national ID. This way we are able to tell
+        whether the ballot belongs to the given national ID or not. However, since the hash is non-deterministic it is
+        practically impossible to find out if two ballots belong to the same voter.
+
     b. What we can do better -
+
+        We can add multi-factor authentication to further enhance the authentication process.
+
 6. Visibility and Transparency
     a. How this application does it -
+
+        We are providing user the information that we are keeping the national ID only for the verification and the vote
+        is anonymous after that.
+        We are also sharing the information that we still create an internal list of fraud voters which is not shared
+        publicly.
+
     b. What we can do better -
+
+        We can share information that we do not share information with any third-party.
+
 7. Respect for User Privacy
     a. How this application does it -
+
+        We are providing user an initial prompt, providing the privacy policy information, and then taking their consent
+        by clicking on the 'OK' button on the prompt window.
+        The users are free to cancel the vote by clicking on the cancel button.
+        The users are also prompted once the vote has been cast about how to de-register the vote before the results
+        are out.
+
     b. What we can do better -
+
+        We can provide more information about the user's data retention in case the user wants to de-register the vote.
