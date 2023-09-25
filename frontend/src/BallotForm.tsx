@@ -67,6 +67,9 @@ export class IBallotForm extends React.PureComponent<{}, IBallotFormState> {
         </RadioGroup>
         <br />
         <H5 className="white-text">Additional Voter Comments</H5>
+        <>
+            <p>Kindly do not add any kind of Personal Identity Information, for example your name, national ID and/or phone number, in the comment section.</p>
+        </>
         <TextArea onChange={this.onCommentUpdate} growVertically={true} value={comments} fill={true} placeholder="Comments or concerns" />
       </FormGroup>
       <Button onClick={this.onVoteSubmission} intent={Intent.PRIMARY}>Submit Vote</Button>
@@ -145,6 +148,13 @@ export class IBallotForm extends React.PureComponent<{}, IBallotFormState> {
       // TODO: Since the ballot was successfully counted, inform the user, and inform the user 
       //       about deleting their voter details (see example in the if-statement above)
       this.clearEnteredState();
+      response.json().then((res) => {
+        toaster.show({
+          message: "Your vote has been casted",
+          intent: Intent.SUCCESS
+        });
+        window.alert("Your vote has been casted successfully.\nPlease note that you can de-register your vote anytime before the results.\nKindly contact the voter registrar to de-register.")
+      });
     }
   }
 
